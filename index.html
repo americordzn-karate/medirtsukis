@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Senshi-Kan 10s Gyaku Tsuki</title>
+  <title>Senshi-Form AI - Test 10s Gyaku Tsuki</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -21,9 +21,17 @@
     .input-field { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: bold; color: #FFD700; }
     input { padding: 4px; border-radius: 4px; border: 1px solid #FFD700; background: #000; color: #FFD700; text-align: center; }
     #atleta-nombre { width: 120px; text-align: left; }
-    #main-view { position: relative; flex-grow: 1; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    
+    #main-view { position: relative; flex-grow: 1; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+    #canvas-container { position: relative; display: flex; align-items: center; justify-content: center; max-height: 70vh; width: 100%; }
     #output_canvas { max-width: 100%; max-height: 100%; }
     .mirror { transform: scaleX(-1); }
+    
+    /* MONITOR DEL VALOR DEL ÁNGULO EN TIEMPO REAL */
+    #live-angle-container { width: 90%; max-width: 450px; background: rgba(15,15,15,0.95); border: 1px solid #333; border-radius: 8px; padding: 12px; box-sizing: border-box; margin-top: 12px; z-index: 400; text-align: center; }
+    .angle-label { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
+    #angle-number { font-size: 38px; font-weight: bold; color: #FFD700; font-family: monospace; transition: color 0.1s ease; }
+
     button.action-btn { padding: 12px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; text-transform: uppercase; cursor: pointer; flex: 1; }
     .btn-camera { background: #FFD700; color: #000; }
     .btn-start { background: #fff; color: #000; display: none; }
@@ -58,8 +66,16 @@
   </div>
   
   <div id="main-view">
-    <video id="input_video" playsinline muted></video>
-    <canvas id="output_canvas" class="mirror"></canvas>
+    <div id="canvas-container">
+        <video id="input_video" playsinline muted></video>
+        <canvas id="output_canvas" class="mirror"></canvas>
+    </div>
+
+    <!-- MONITOR SIMPLIFICADO: SOLO EL VALOR NUMÉRICO GRANDE -->
+    <div id="live-angle-container">
+        <div id="angle-arm-text" class="angle-label">ÁNGULO CODO (DER)</div>
+        <div id="angle-number">0°</div>
+    </div>
     
     <div id="results-panel">
       <h2 style="color:#FFD700; margin:0; font-size:22px; text-transform:uppercase;">FIN DEL TEST</h2>
@@ -80,15 +96,14 @@
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
     const statusText = document.getElementById('status-display');
+    const angleNumberText = document.getElementById('angle-number');
+    const angleArmText = document.getElementById('angle-arm-text');
 
     let modo = "OFF", selectedArm = "R", facingMode = "user", tsukiCount = 0;
     let pxPorCm = 0, currentLandmarks = null;
     
-    // Banderas de control de ciclo
     let golpeExtendido = false; 
     let baseDesplazada = false;
-    
-    // Puntos de calibración inicial de base
     let posicionInicialPieApoyo = null;
 
     let audioCtx = null;
@@ -123,6 +138,7 @@
       selectedArm = side;
       document.getElementById('btn-left').classList.toggle('active', side === 'L');
       document.getElementById('btn-right').classList.toggle('active', side === 'R');
+      angleArmText.innerText = `ÁNGULO CODO (${side === 'R' ? 'DER' : 'IZQ'})`;
     }
 
     pose.onResults((res) => {
@@ -135,42 +151,44 @@
         currentLandmarks = res.poseLandmarks;
         const lm = currentLandmarks;
         
-        // Nodos del brazo bajo análisis
         const pArm = (selectedArm === 'R') ? [12, 14, 16] : [11, 13, 15];
         const hombro = lm[pArm[0]], codo = lm[pArm[1]], muñeca = lm[pArm[2]];
 
-        // Nodo del pie de apoyo (contrario al brazo que golpea en un Gyaku Tsuki clásico)
-        // Si golpea derecho (R), el pie de apoyo/atrás suele ser el izquierdo (31), o viceversa.
         const idxPieApoyo = (selectedArm === 'R') ? 31 : 32; 
         const pieApoyo = lm[idxPieApoyo];
 
-        // Escala de píxeles a centímetros mediante el antebrazo
         pxPorCm = Math.hypot((muñeca.x - codo.x) * canvasElement.width, (muñeca.y - codo.y) * canvasElement.height) / parseFloat(document.getElementById('antebrazo-cm').value);
         
-        // Cálculo del ángulo del codo
         let angCodo = Math.abs((Math.atan2(muñeca.y - codo.y, muñeca.x - codo.x) - Math.atan2(hombro.y - codo.y, hombro.x - codo.x)) * 180 / Math.PI);
         if (angCodo > 180) angCodo = 360 - angCodo;
 
-        // Renderizado simplificado de esqueleto (Solo brazo analizado y marcas críticas)
+        // --- ACTUALIZACIÓN EXCLUSIVA DE LOS VALORES EN TIEMPO REAL ---
+        angleNumberText.innerText = `${Math.round(angCodo)}°`;
+        
+        // Cambios de color directo en el número según umbrales del dojo
+        if (angCodo >= 175) {
+            angleNumberText.style.color = "#10b981"; // Verde: Extensión completa
+        } else if (angCodo <= 30) {
+            angleNumberText.style.color = "#0284c7"; // Azul: Hikite / Recobro
+        } else {
+            angleNumberText.style.color = "#FFD700"; // Amarillo Oro: Recorrido intermedio
+        }
+
+        // Renderizado del esqueleto deportivo
         canvasCtx.lineWidth = 4; canvasCtx.strokeStyle = "#FFD700";
         canvasCtx.beginPath(); canvasCtx.moveTo(hombro.x * canvasElement.width, hombro.y * canvasElement.height);
         canvasCtx.lineTo(codo.x * canvasElement.width, codo.y * canvasElement.height);
         canvasCtx.lineTo(muñeca.x * canvasElement.width, muñeca.y * canvasElement.height); canvasCtx.stroke();
         
-        // Resaltar pie de apoyo monitoreado
         canvasCtx.fillStyle = "#00E5FF"; canvasCtx.beginPath();
         canvasCtx.arc(pieApoyo.x * canvasElement.width, pieApoyo.y * canvasElement.height, 8, 0, 2 * Math.PI); canvasCtx.fill();
 
         drawLandmarks(canvasCtx, [hombro, codo, muñeca], {color: "#FFD700", lineWidth: 2});
 
-        // --- LÓGICA DE DETECCIÓN EN TIEMPO REAL ---
+        // --- LÓGICA DE VALIDACIÓN ---
         if (modo === "TEST_ACTIVO") {
-          
-          // 1. CONDICIÓN: Extensión máxima correcta (> 175°)
           if (!golpeExtendido && angCodo >= 175) {
               golpeExtendido = true;
-
-              // Validar si el pie de apoyo se movió al menos 5 cm desde el inicio de la prueba
               if (posicionInicialPieApoyo) {
                   let distanciaPieX = Math.abs(pieApoyo.x - posicionInicialPieApoyo.x) * canvasElement.width / pxPorCm;
                   if (distanciaPieX >= 5.0) {
@@ -179,19 +197,14 @@
               }
           }
 
-          // 2. CONDICIÓN: Retorno / Hikite completo (< 30°)
-          if (golpeExtendido && angCodo <= 45) {
-              // Si cumplió con la extensión y la base se movió al menos 5cm, se cuenta el Tsuki
+          if (golpeExtendido && angCodo <= 30) {
               if (baseDesplazada) {
                   tsukiCount++;
-                  playAudio(1200, 0.15, "sine", 1.0); // Pitido fuerte y agudo de éxito
+                  playAudio(1200, 0.15, "sine", 1.0);
                   statusText.innerText = `TSUKIS: ${tsukiCount}`;
               } else {
-                  // Feedback visual rápido si falló por no mover la base
-                  playAudio(300, 0.1, "triangle", 0.3); // Sonido sordo indicador de falta de base
+                  playAudio(300, 0.1, "triangle", 0.3);
               }
-              
-              // Resetear banderas para el siguiente golpe del bucle
               golpeExtendido = false;
               baseDesplazada = false;
           }
@@ -205,7 +218,7 @@
         document.getElementById('btn-start-test').style.display = "none";
         
         const timer = setInterval(() => {
-            statusText.style.background = "#b45309"; // Amarillo/Ámbar
+            statusText.style.background = "#b45309";
             statusText.style.color = "#fff";
             statusText.innerText = `¡PREPARASE!: ${cuenta}`;
             playAudio(600, 0.08, "sine"); cuenta--;
@@ -223,15 +236,13 @@
         baseDesplazada = false;
         modo = "TEST_ACTIVO";
 
-        // Capturar la posición base del pie de apoyo justo en el pitido de Hajime
         if (currentLandmarks) {
             const idxPieApoyo = (selectedArm === 'R') ? 31 : 32;
             posicionInicialPieApoyo = { x: currentLandmarks[idxPieApoyo].x, y: currentLandmarks[idxPieApoyo].y };
         }
 
-        // Chicharra de inicio (¡HAJIME!)
         playAudio(180, 0.6, "sawtooth", 0.9);
-        statusText.style.background = "#064e3b"; // Verde
+        statusText.style.background = "#064e3b";
         statusText.style.color = "#fff";
         statusText.innerText = `¡HAJIME! TSUKIS: 0`;
 
@@ -251,7 +262,6 @@
 
     function finalizarTest() {
         modo = "FIN";
-        // Doble pitido largo (¡YAME!)
         playAudio(220, 0.4, "sawtooth", 0.8);
         setTimeout(() => { playAudio(220, 0.4, "sawtooth", 0.8); }, 500);
 
@@ -259,7 +269,6 @@
         statusText.style.color = "#FFD700";
         statusText.innerText = "¡YAME! TEST COMPLETADO";
 
-        // Mostrar pantalla de resultados
         const nombreAtleta = document.getElementById('atleta-nombre').value.toUpperCase();
         document.getElementById('report-atleta').innerText = `ALUMNO: ${nombreAtleta} (BRAZO ${selectedArm === 'R' ? 'DERECHO' : 'IZQUIERDO'})`;
         document.getElementById('final-count').innerText = tsukiCount;
