@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Senshi-Form AI - Test 10s Gyaku Tsuki</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+  <style>
+    body { margin: 0; background: #000; color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    #top-controls { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 300; display: flex; flex-direction: column; gap: 6px; }
+    .btn-row { display: flex; gap: 6px; }
+    #status-display { background: rgba(30,30,30,0.95); padding: 12px; border-radius: 10px; border: 3px solid #FFD700; font-size: 16px; font-weight: bold; text-align: center; flex-grow: 2; text-transform: uppercase; transition: background 0.2s ease, color 0.2s ease; }
+    .selector-group { display: flex; flex-direction: column; gap: 3px; background: rgba(0,0,0,0.8); padding: 4px; border-radius: 8px; border: 1px solid #444; }
+    .opt-btn { padding: 4px 8px; border: 1px solid #FFD700; background: #222; color: #FFD700; border-radius: 5px; font-size: 9px; font-weight: bold; cursor: pointer; text-align: center; white-space: nowrap; }
+    .opt-btn.active { background: #FFD700; color: #000; }
+    .config-box { background: rgba(0,0,0,0.85); padding: 6px; border-radius: 10px; border: 1px solid #FFD700; display: flex; flex-wrap: wrap; justify-content: space-around; align-items: center; gap: 5px; }
+    .input-field { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: bold; color: #FFD700; }
+    input { padding: 4px; border-radius: 4px; border: 1px solid #FFD700; background: #000; color: #FFD700; text-align: center; }
+    #atleta-nombre { width: 120px; text-align: left; }
+    #main-view { position: relative; flex-grow: 1; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    #output_canvas { max-width: 100%; max-height: 100%; }
+    .mirror { transform: scaleX(-1); }
+    button.action-btn { padding: 12px; font-size: 13px; font-weight: bold; border: none; border-radius: 8px; text-transform: uppercase; cursor: pointer; flex: 1; }
+    .btn-camera { background: #FFD700; color: #000; }
+    .btn-start { background: #fff; color: #000; display: none; }
+    
+    /* PANTALLA REPORTE FINAL */
+    #results-panel { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); display: none; z-index: 500; overflow-y: auto; padding: 30px 15px; box-sizing: border-box; border-top: 5px solid #FFD700; text-align: center; }
+    .score-box { background: #111; border: 3px solid #FFD700; border-radius: 15px; padding: 25px; margin: 20px auto; max-width: 280px; }
+    .score-number { font-size: 64px; font-weight: bold; color: #FFD700; margin: 10px 0; }
+    #input_video { display: none; }
+  </style>
+</head>
+<body>
+
+  <div id="top-controls">
+    <div class="btn-row">
+        <div id="status-display">TEST 10s GYAKU TSUKI</div>
+        <div class="selector-group">
+            <div id="btn-cam-front" class="opt-btn active" onclick="switchCam('user')">FRONT</div>
+            <div id="btn-cam-back" class="opt-btn" onclick="switchCam('environment')">BACK</div>
+        </div>
+        <div class="selector-group">
+            <div id="btn-left" class="opt-btn" onclick="selectArm('L')">IZQ</div>
+            <div id="btn-right" class="opt-btn active" onclick="selectArm('R')">DER</div>
+        </div>
+    </div>
+    <div class="config-box">
+        <div class="input-field">ALUMNO: <input type="text" id="atleta-nombre" value="KARATEKA"></div>
+        <div class="input-field">BRAZO(CM): <input type="number" id="antebrazo-cm" style="width:40px;" value="25"></div>
+        <button id="btn-camera" class="action-btn btn-camera" style="max-width: 95px; padding: 6px;" onclick="activarCamara()">1. CONECTAR</button>
+    </div>
+    <button id="btn-start-test" class="action-btn btn-start" onclick="prepararTest()">2. INICIAR TEST (HAJIME)</button>
+  </div>
+  
+  <div id="main-view">
+    <video id="input_video" playsinline muted></video>
+    <canvas id="output_canvas" class="mirror"></canvas>
+    
+    <div id="results-panel">
+      <h2 style="color:#FFD700; margin:0; font-size:22px; text-transform:uppercase;">FIN DEL TEST</h2>
+      <p id="report-atleta" style="color:#aaa; font-size:14px; margin:5px 0;"></p>
+      
+      <div class="score-box">
+         <div style="font-size: 14px; letter-spacing: 1px; color:#fff;">TSUKIS VALIDADOS</div>
+         <div id="final-count" class="score-number">0</div>
+         <div style="font-size: 11px; color:#10b981; font-weight:bold;">TÉCNICA + BASE CORRECTA</div>
+      </div>
+
+      <button class="action-btn btn-camera" onclick="location.reload()" style="width:100%; max-width:280px; padding:12px; margin-top:10px;">REPETIR PRUEBA</button>
+    </div>
+  </div>
+
+  <script>
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const statusText = document.getElementById('status-display');
+
+    let modo = "OFF", selectedArm = "R", facingMode = "user", tsukiCount = 0;
+    let pxPorCm = 0, currentLandmarks = null;
+    
+    // Banderas de control de ciclo
+    let golpeExtendido = false; 
+    let baseDesplazada = false;
+    
+    // Puntos de calibración inicial de base
+    let posicionInicialPieApoyo = null;
+
+    let audioCtx = null;
+    function initAudio() {
+        if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+    }
+
+    function playAudio(freq, dur, type="sawtooth", vol=0.7) {
+        initAudio(); if(!audioCtx) return;
+        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime); 
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
+        osc.start(); osc.stop(audioCtx.currentTime + dur);
+    }
+
+    const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+    pose.setOptions({ modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+
+    function switchCam(mode) {
+      if (modo !== "OFF") return;
+      facingMode = mode;
+      document.getElementById('btn-cam-front').classList.toggle('active', mode === 'user');
+      document.getElementById('btn-cam-back').classList.toggle('active', mode === 'environment');
+      canvasElement.classList.toggle('mirror', mode === 'user');
+    }
+
+    function selectArm(side) {
+      if (modo !== "OFF") return;
+      selectedArm = side;
+      document.getElementById('btn-left').classList.toggle('active', side === 'L');
+      document.getElementById('btn-right').classList.toggle('active', side === 'R');
+    }
+
+    pose.onResults((res) => {
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+      canvasCtx.save(); canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(res.image, 0, 0, canvasElement.width, canvasElement.height);
+      
+      if (res.poseLandmarks) {
+        currentLandmarks = res.poseLandmarks;
+        const lm = currentLandmarks;
+        
+        // Nodos del brazo bajo análisis
+        const pArm = (selectedArm === 'R') ? [12, 14, 16] : [11, 13, 15];
+        const hombro = lm[pArm[0]], codo = lm[pArm[1]], muñeca = lm[pArm[2]];
+
+        // Nodo del pie de apoyo (contrario al brazo que golpea en un Gyaku Tsuki clásico)
+        // Si golpea derecho (R), el pie de apoyo/atrás suele ser el izquierdo (31), o viceversa.
+        const idxPieApoyo = (selectedArm === 'R') ? 31 : 32; 
+        const pieApoyo = lm[idxPieApoyo];
+
+        // Escala de píxeles a centímetros mediante el antebrazo
+        pxPorCm = Math.hypot((muñeca.x - codo.x) * canvasElement.width, (muñeca.y - codo.y) * canvasElement.height) / parseFloat(document.getElementById('antebrazo-cm').value);
+        
+        // Cálculo del ángulo del codo
+        let angCodo = Math.abs((Math.atan2(muñeca.y - codo.y, muñeca.x - codo.x) - Math.atan2(hombro.y - codo.y, hombro.x - codo.x)) * 180 / Math.PI);
+        if (angCodo > 180) angCodo = 360 - angCodo;
+
+        // Renderizado simplificado de esqueleto (Solo brazo analizado y marcas críticas)
+        canvasCtx.lineWidth = 4; canvasCtx.strokeStyle = "#FFD700";
+        canvasCtx.beginPath(); canvasCtx.moveTo(hombro.x * canvasElement.width, hombro.y * canvasElement.height);
+        canvasCtx.lineTo(codo.x * canvasElement.width, codo.y * canvasElement.height);
+        canvasCtx.lineTo(muñeca.x * canvasElement.width, muñeca.y * canvasElement.height); canvasCtx.stroke();
+        
+        // Resaltar pie de apoyo monitoreado
+        canvasCtx.fillStyle = "#00E5FF"; canvasCtx.beginPath();
+        canvasCtx.arc(pieApoyo.x * canvasElement.width, pieApoyo.y * canvasElement.height, 8, 0, 2 * Math.PI); canvasCtx.fill();
+
+        drawLandmarks(canvasCtx, [hombro, codo, muñeca], {color: "#FFD700", lineWidth: 2});
+
+        // --- LÓGICA DE DETECCIÓN EN TIEMPO REAL ---
+        if (modo === "TEST_ACTIVO") {
+          
+          // 1. CONDICIÓN: Extensión máxima correcta (> 175°)
+          if (!golpeExtendido && angCodo >= 175) {
+              golpeExtendido = true;
+
+              // Validar si el pie de apoyo se movió al menos 5 cm desde el inicio de la prueba
+              if (posicionInicialPieApoyo) {
+                  let distanciaPieX = Math.abs(pieApoyo.x - posicionInicialPieApoyo.x) * canvasElement.width / pxPorCm;
+                  if (distanciaPieX >= 5.0) {
+                      baseDesplazada = true;
+                  }
+              }
+          }
+
+          // 2. CONDICIÓN: Retorno / Hikite completo (< 30°)
+          if (golpeExtendido && angCodo <= 30) {
+              // Si cumplió con la extensión y la base se movió al menos 5cm, se cuenta el Tsuki
+              if (baseDesplazada) {
+                  tsukiCount++;
+                  playAudio(1200, 0.15, "sine", 1.0); // Pitido fuerte y agudo de éxito
+                  statusText.innerText = `TSUKIS: ${tsukiCount}`;
+              } else {
+                  // Feedback visual rápido si falló por no mover la base
+                  playAudio(300, 0.1, "triangle", 0.3); // Sonido sordo indicador de falta de base
+              }
+              
+              // Resetear banderas para el siguiente golpe del bucle
+              golpeExtendido = false;
+              baseDesplazada = false;
+          }
+        }
+      }
+      canvasCtx.restore();
+    });
+
+    function prepararTest() {
+        initAudio(); let cuenta = 5;
+        document.getElementById('btn-start-test').style.display = "none";
+        
+        const timer = setInterval(() => {
+            statusText.style.background = "#b45309"; // Amarillo/Ámbar
+            statusText.style.color = "#fff";
+            statusText.innerText = `¡PREPARASE!: ${cuenta}`;
+            playAudio(600, 0.08, "sine"); cuenta--;
+            
+            if(cuenta < 0) { 
+                clearInterval(timer); 
+                iniciarTest10Segundos(); 
+            }
+        }, 1000);
+    }
+
+    function iniciarTest10Segundos() {
+        tsukiCount = 0;
+        golpeExtendido = false;
+        baseDesplazada = false;
+        modo = "TEST_ACTIVO";
+
+        // Capturar la posición base del pie de apoyo justo en el pitido de Hajime
+        if (currentLandmarks) {
+            const idxPieApoyo = (selectedArm === 'R') ? 31 : 32;
+            posicionInicialPieApoyo = { x: currentLandmarks[idxPieApoyo].x, y: currentLandmarks[idxPieApoyo].y };
+        }
+
+        // Chicharra de inicio (¡HAJIME!)
+        playAudio(180, 0.6, "sawtooth", 0.9);
+        statusText.style.background = "#064e3b"; // Verde
+        statusText.style.color = "#fff";
+        statusText.innerText = `¡HAJIME! TSUKIS: 0`;
+
+        let tiempoRestante = 10;
+        const cronometro = setInterval(() => {
+            tiempoRestante--;
+            if (modo === "TEST_ACTIVO") {
+                statusText.innerText = `TIEMPO: ${tiempoRestante}s | TSUKIS: ${tsukiCount}`;
+            }
+
+            if (tiempoRestante <= 0) {
+                clearInterval(cronometro);
+                finalizarTest();
+            }
+        }, 1000);
+    }
+
+    function finalizarTest() {
+        modo = "FIN";
+        // Doble pitido largo (¡YAME!)
+        playAudio(220, 0.4, "sawtooth", 0.8);
+        setTimeout(() => { playAudio(220, 0.4, "sawtooth", 0.8); }, 500);
+
+        statusText.style.background = "#1a1a1a";
+        statusText.style.color = "#FFD700";
+        statusText.innerText = "¡YAME! TEST COMPLETADO";
+
+        // Mostrar pantalla de resultados
+        const nombreAtleta = document.getElementById('atleta-nombre').value.toUpperCase();
+        document.getElementById('report-atleta').innerText = `ALUMNO: ${nombreAtleta} (BRAZO ${selectedArm === 'R' ? 'DERECHO' : 'IZQUIERDO'})`;
+        document.getElementById('final-count').innerText = tsukiCount;
+        document.getElementById('results-panel').style.display = "block";
+    }
+
+    async function activarCamara() {
+      initAudio();
+      const camera = new Camera(videoElement, { 
+          onFrame: async () => { await pose.send({image: videoElement}); }, 
+          facingMode: facingMode, 
+          width: 640, 
+          height: 480 
+      });
+      camera.start(); 
+      document.getElementById('btn-camera').style.display = "none"; 
+      document.getElementById('btn-start-test').style.display = "block";
+    }
+  </script>
+</body>
+</html>
