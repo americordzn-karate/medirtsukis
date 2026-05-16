@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Senshi-Form AI - Test 10s Gyaku Tsuki</title>
+  <title>Senshi-Kan 10s Gyaku Tsuki</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -27,7 +27,6 @@
     #output_canvas { max-width: 100%; max-height: 100%; }
     .mirror { transform: scaleX(-1); }
     
-    /* MONITOR DEL VALOR DEL ÁNGULO EN TIEMPO REAL */
     #live-angle-container { width: 90%; max-width: 450px; background: rgba(15,15,15,0.95); border: 1px solid #333; border-radius: 8px; padding: 12px; box-sizing: border-box; margin-top: 12px; z-index: 400; text-align: center; }
     .angle-label { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
     #angle-number { font-size: 38px; font-weight: bold; color: #FFD700; font-family: monospace; transition: color 0.1s ease; }
@@ -71,7 +70,6 @@
         <canvas id="output_canvas" class="mirror"></canvas>
     </div>
 
-    <!-- MONITOR SIMPLIFICADO: SOLO EL VALOR NUMÉRICO GRANDE -->
     <div id="live-angle-container">
         <div id="angle-arm-text" class="angle-label">ÁNGULO CODO (DER)</div>
         <div id="angle-number">0°</div>
@@ -104,7 +102,10 @@
     
     let golpeExtendido = false; 
     let baseDesplazada = false;
+    
+    // Puntos de calibración y disparo de inicio automático
     let posicionInicialPieApoyo = null;
+    let posicionCalibracionCamaraPie = null; 
 
     let audioCtx = null;
     function initAudio() {
@@ -134,7 +135,7 @@
     }
 
     function selectArm(side) {
-      if (modo !== "OFF") return;
+      if (modo !== "OFF" && modo !== "ESPERANDO_INICIO") return;
       selectedArm = side;
       document.getElementById('btn-left').classList.toggle('active', side === 'L');
       document.getElementById('btn-right').classList.toggle('active', side === 'R');
@@ -162,30 +163,47 @@
         let angCodo = Math.abs((Math.atan2(muñeca.y - codo.y, muñeca.x - codo.x) - Math.atan2(hombro.y - codo.y, hombro.x - codo.x)) * 180 / Math.PI);
         if (angCodo > 180) angCodo = 360 - angCodo;
 
-        // --- ACTUALIZACIÓN EXCLUSIVA DE LOS VALORES EN TIEMPO REAL ---
+        // --- MONITOR DE ÁNGULO EN TIEMPO REAL ---
         angleNumberText.innerText = `${Math.round(angCodo)}°`;
         
-        // Cambios de color directo en el número según umbrales del dojo
+        // Cambios de color adaptados al nuevo umbral de 45°
         if (angCodo >= 175) {
             angleNumberText.style.color = "#10b981"; // Verde: Extensión completa
-        } else if (angCodo <= 30) {
-            angleNumberText.style.color = "#0284c7"; // Azul: Hikite / Recobro
+        } else if (angCodo <= 45) {
+            angleNumberText.style.color = "#0284c7"; // Azul: Hikite / Recobro correcto (<= 45°)
         } else {
-            angleNumberText.style.color = "#FFD700"; // Amarillo Oro: Recorrido intermedio
+            angleNumberText.style.color = "#FFD700"; // Amarillo Oro: Transición
         }
 
-        // Renderizado del esqueleto deportivo
+        // --- RENDERIZADO DEL ESQUELETO ---
         canvasCtx.lineWidth = 4; canvasCtx.strokeStyle = "#FFD700";
         canvasCtx.beginPath(); canvasCtx.moveTo(hombro.x * canvasElement.width, hombro.y * canvasElement.height);
         canvasCtx.lineTo(codo.x * canvasElement.width, codo.y * canvasElement.height);
         canvasCtx.lineTo(muñeca.x * canvasElement.width, muñeca.y * canvasElement.height); canvasCtx.stroke();
         
+        // Render del nodo del pie de apoyo monitoreado
         canvasCtx.fillStyle = "#00E5FF"; canvasCtx.beginPath();
         canvasCtx.arc(pieApoyo.x * canvasElement.width, pieApoyo.y * canvasElement.height, 8, 0, 2 * Math.PI); canvasCtx.fill();
 
         drawLandmarks(canvasCtx, [hombro, codo, muñeca], {color: "#FFD700", lineWidth: 2});
 
-        // --- LÓGICA DE VALIDACIÓN ---
+        // --- MODO: ESPERANDO DISPARO AUTOMÁTICO DE INICIO ---
+        if (modo === "ESPERANDO_INICIO") {
+            if (!posicionCalibracionCamaraPie) {
+                // Registrar la posición en reposo inicial del pie al encender la cámara
+                posicionCalibracionCamaraPie = { x: pieApoyo.x, y: pieApoyo.y };
+            } else {
+                // Calcular diferencia vertical en centímetros (Invertido en píxeles: subir implica menor 'y')
+                let elevacionPieCm = (posicionCalibracionCamaraPie.y - pieApoyo.y) * canvasElement.height / pxPorCm;
+                
+                // Si el pie se levanta 15 cm o más, se dispara el test de inmediato
+                if (elevacionPieCm >= 15.0) {
+                    prepararTest();
+                }
+            }
+        }
+
+        // --- MODO: TEST EN CURSO (10 SEGUNDOS ACTIVOS) ---
         if (modo === "TEST_ACTIVO") {
           if (!golpeExtendido && angCodo >= 175) {
               golpeExtendido = true;
@@ -197,13 +215,14 @@
               }
           }
 
-          if (golpeExtendido && angCodo <= 30) {
+          // Validación modificada a umbral de 45 grados para el recobro continuo
+          if (golpeExtendido && angCodo <= 45) {
               if (baseDesplazada) {
                   tsukiCount++;
                   playAudio(1200, 0.15, "sine", 1.0);
                   statusText.innerText = `TSUKIS: ${tsukiCount}`;
               } else {
-                  playAudio(300, 0.1, "triangle", 0.3);
+                  playAudio(300, 0.1, "triangle", 0.3); // Falta de desplazamiento base
               }
               golpeExtendido = false;
               baseDesplazada = false;
@@ -214,6 +233,8 @@
     });
 
     function prepararTest() {
+        if (modo === "PREPARACION" || modo === "TEST_ACTIVO") return; 
+        modo = "PREPARACION";
         initAudio(); let cuenta = 5;
         document.getElementById('btn-start-test').style.display = "none";
         
@@ -236,6 +257,7 @@
         baseDesplazada = false;
         modo = "TEST_ACTIVO";
 
+        // Registrar la base firme exacta para el test al segundo cero del Hajime
         if (currentLandmarks) {
             const idxPieApoyo = (selectedArm === 'R') ? 31 : 32;
             posicionInicialPieApoyo = { x: currentLandmarks[idxPieApoyo].x, y: currentLandmarks[idxPieApoyo].y };
@@ -277,6 +299,9 @@
 
     async function activarCamara() {
       initAudio();
+      posicionCalibracionCamaraPie = null; // Reiniciar calibración automática
+      modo = "ESPERANDO_INICIO";
+      
       const camera = new Camera(videoElement, { 
           onFrame: async () => { await pose.send({image: videoElement}); }, 
           facingMode: facingMode, 
@@ -286,6 +311,7 @@
       camera.start(); 
       document.getElementById('btn-camera').style.display = "none"; 
       document.getElementById('btn-start-test').style.display = "block";
+      statusText.innerText = "MUEVA EL PIE O PRESIONE INICIAR PARA ARRANCAR";
     }
   </script>
 </body>
