@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Senshi-Form AI - Test 10s Gyaku Tsuki</title>
+  <title>Senshi-Kan 10s Gyaku Tsuki</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -180,7 +180,7 @@
           }
 
           // 2. CONDICIÓN: Retorno / Hikite completo (< 30°)
-          if (golpeExtendido && angCodo <= 30) {
+          if (golpeExtendido && angCodo <= 45) {
               // Si cumplió con la extensión y la base se movió al menos 5cm, se cuenta el Tsuki
               if (baseDesplazada) {
                   tsukiCount++;
