@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Senshi-Kan 10s Gyaku Tsuki</title>
+  <title>Senshi-Form AI - Test 10s Gyaku Tsuki</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -39,6 +39,7 @@
     #results-panel { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); display: none; z-index: 500; overflow-y: auto; padding: 30px 15px; box-sizing: border-box; border-top: 5px solid #FFD700; text-align: center; }
     .score-box { background: #111; border: 3px solid #FFD700; border-radius: 15px; padding: 25px; margin: 20px auto; max-width: 280px; }
     .score-number { font-size: 64px; font-weight: bold; color: #FFD700; margin: 10px 0; }
+    #feedback-text { color: #fff; font-size: 15px; font-style: italic; margin: 15px auto; max-width: 320px; min-height: 45px; line-height: 1.4; }
     #input_video { display: none; }
   </style>
 </head>
@@ -46,7 +47,7 @@
 
   <div id="top-controls">
     <div class="btn-row">
-        <div id="status-display">10s GYAKU TSUKI</div>
+        <div id="status-display">TEST 10s GYAKU TSUKI</div>
         <div class="selector-group">
             <div id="btn-cam-front" class="opt-btn active" onclick="switchCam('user')">FRONT</div>
             <div id="btn-cam-back" class="opt-btn" onclick="switchCam('environment')">BACK</div>
@@ -85,6 +86,8 @@
          <div style="font-size: 11px; color:#10b981; font-weight:bold;">TÉCNICA + BASE CORRECTA</div>
       </div>
 
+      <div id="feedback-text"></div>
+
       <button class="action-btn btn-camera" onclick="location.reload()" style="width:100%; max-width:280px; padding:12px; margin-top:10px;">REPETIR PRUEBA</button>
     </div>
   </div>
@@ -105,16 +108,32 @@
     let posicionInicialPieApoyo = null;
     let posicionCalibracionCamaraPie = null; 
 
-    // --- NUEVO SISTEMA DE AUDIO: SÍNTESIS DE VOZ NATIVA ---
-    function decir(texto, urgencia = false) {
+    // --- GENERADOR HÍBRIDO: SÍNTESIS DE VOZ + BUZZER NATIVO ---
+    let audioCtx = null;
+    function initAudio() {
+        if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+    }
+
+    // Beep para golpes y alertas físicas directas sin retraso
+    function playBeep(freq, dur, type="sine", vol=0.8) {
+        initAudio(); if(!audioCtx) return;
+        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime); 
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
+        osc.start(); osc.stop(audioCtx.currentTime + dur);
+    }
+
+    // Lector de textos por voz nativo
+    function decir(texto, cancelarPrevio = false) {
         if ('speechSynthesis' in window) {
-            // Si es un conteo numérico rápido o golpe, cancelamos el audio previo para evitar retrasos acumulados
-            if (urgencia) { window.speechSynthesis.cancel(); }
-            
+            if (cancelarPrevio) { window.speechSynthesis.cancel(); }
             const utterance = new SpeechSynthesisUtterance(texto);
-            utterance.lang = 'es-MX'; // Español de México
-            utterance.rate = 1.2;     // Velocidad ligeramente aumentada para mantener el ritmo deportivo
-            utterance.pitch = 1.0;    // Tono de voz normal/firme
+            utterance.lang = 'es-MX';
+            utterance.rate = 1.1;
+            utterance.pitch = 1.0; 
             window.speechSynthesis.speak(utterance);
         }
     }
@@ -205,8 +224,10 @@
               if (baseDesplazada) {
                   tsukiCount++;
                   statusText.innerText = `TSUKIS: ${tsukiCount}`;
-                  // Dice el número del golpe inmediatamente reemplazando cualquier audio previo
-                  decir(tsukiCount.toString(), true); 
+                  // ⚡ RETORNO DE BEEP INMEDIATO SIN RETRASO PARA CONTEO SEGURO
+                  playBeep(1000, 0.12, "sine", 1.0);
+              } else {
+                  playBeep(250, 0.15, "triangle", 0.4); // Falta base firme
               }
               golpeExtendido = false;
               baseDesplazada = false;
@@ -219,10 +240,9 @@
     function prepararTest() {
         if (modo === "PREPARACION" || modo === "TEST_ACTIVO") return; 
         modo = "PREPARACION";
-        let cuenta = 5;
+        initAudio(); let cuenta = 5;
         document.getElementById('btn-start-test').style.display = "none";
         
-        // Primera llamada para despertar el motor de voz en interacciones móviles
         decir("Preparase");
 
         const timer = setInterval(() => {
@@ -230,9 +250,7 @@
             statusText.style.color = "#fff";
             statusText.innerText = `¡PREPARASE!: ${cuenta}`;
             
-            if (cuenta > 0) {
-                decir(cuenta.toString());
-            }
+            if (cuenta > 0) { decir(cuenta.toString()); }
             cuenta--;
             
             if(cuenta < 0) { 
@@ -257,7 +275,6 @@
         statusText.style.color = "#fff";
         statusText.innerText = `¡HAJIME! TSUKIS: 0`;
         
-        // ¡Señal verbal de inicio de combate!
         decir("¡Hajime!", true);
 
         let tiempoRestante = 10;
@@ -265,11 +282,6 @@
             tiempoRestante--;
             if (modo === "TEST_ACTIVO") {
                 statusText.innerText = `TIEMPO: ${tiempoRestante}s | TSUKIS: ${tsukiCount}`;
-            }
-
-            // Alerta verbal de los últimos 3 segundos (Opcional, añade presión competitiva)
-            if (tiempoRestante <= 3 && tiempoRestante > 0 && modo === "TEST_ACTIVO") {
-                decir(tiempoRestante.toString());
             }
 
             if (tiempoRestante <= 0) {
@@ -281,7 +293,6 @@
 
     function finalizarTest() {
         modo = "FIN";
-        // Comando de detención inmediata
         decir("¡Yame!", true);
 
         statusText.style.background = "#1a1a1a";
@@ -291,11 +302,38 @@
         const nombreAtleta = document.getElementById('atleta-nombre').value.toUpperCase();
         document.getElementById('report-atleta').innerText = `ALUMNO: ${nombreAtleta} (BRAZO ${selectedArm === 'R' ? 'DERECHO' : 'IZQUIERDO'})`;
         document.getElementById('final-count').innerText = tsukiCount;
+        
+        // --- PROCESAMIENTO DE LAS CONDICIONANTES VERBALES ---
+        let fraseCondicional = "";
+        if (tsukiCount > 10) {
+            fraseCondicional = "¡Felicidades! Eres una máquina de Yako Tsukis, casi casi como el sensei Américo.";
+        } else if (tsukiCount >= 8 && tsukiCount <= 10) {
+            fraseCondicional = "¡Bien hecho!";
+        } else if (tsukiCount >= 5 && tsukiCount <= 7) {
+            fraseCondicional = "Mmmmm hay que seguir trabajando para mejorar esa cuenta.";
+        } else if (tsukiCount >= 2 && tsukiCount <= 4) {
+            fraseCondicional = "Bueno... ¡espero que el sensei no te haya visto!";
+        } else if (tsukiCount === 1) {
+            fraseCondicional = "¿Te dio algún calambre o qué?";
+        } else { // 0 golpes
+            fraseCondicional = "¿No has pensado en tocar guitarra mejor?";
+        }
+
+        // Construcción del mensaje final de voz
+        const mensajeVozFinal = `Prueba finalizada. Conseguiste ${tsukiCount} golpes exitosos. ${fraseCondicional}`;
+        
+        // Desplegar texto en el panel visual
+        document.getElementById('feedback-text').innerText = fraseCondicional;
         document.getElementById('results-panel').style.display = "block";
+
+        // Pequeño retardo después del Yame para que no se encimen los audios
+        setTimeout(() => {
+            decir(mensajeVozFinal, false);
+        }, 800);
     }
 
     async function activarCamara() {
-      // Activar un audio vacío al inicio para asegurar permisos del navegador en móviles
+      initAudio();
       decir(""); 
       posicionCalibracionCamaraPie = null;
       modo = "ESPERANDO_INICIO";
