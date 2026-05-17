@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Senshi-Form AI - Test 10s Gyaku Tsuki</title>
+  <title>Senshi-Kan AI - 10s Gyaku Tsuki</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -108,14 +108,12 @@
     let posicionInicialPieApoyo = null;
     let posicionCalibracionCamaraPie = null; 
 
-    // --- GENERADOR HÍBRIDO: SÍNTESIS DE VOZ + BUZZER NATIVO ---
     let audioCtx = null;
     function initAudio() {
         if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
         if (audioCtx.state === 'suspended') { audioCtx.resume(); }
     }
 
-    // Beep para golpes y alertas físicas directas sin retraso
     function playBeep(freq, dur, type="sine", vol=0.8) {
         initAudio(); if(!audioCtx) return;
         const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
@@ -126,7 +124,6 @@
         osc.start(); osc.stop(audioCtx.currentTime + dur);
     }
 
-    // Lector de textos por voz nativo
     function decir(texto, cancelarPrevio = false) {
         if ('speechSynthesis' in window) {
             if (cancelarPrevio) { window.speechSynthesis.cancel(); }
@@ -224,10 +221,9 @@
               if (baseDesplazada) {
                   tsukiCount++;
                   statusText.innerText = `TSUKIS: ${tsukiCount}`;
-                  // ⚡ RETORNO DE BEEP INMEDIATO SIN RETRASO PARA CONTEO SEGURO
                   playBeep(1000, 0.12, "sine", 1.0);
               } else {
-                  playBeep(250, 0.15, "triangle", 0.4); // Falta base firme
+                  playBeep(250, 0.15, "triangle", 0.4);
               }
               golpeExtendido = false;
               baseDesplazada = false;
@@ -277,7 +273,7 @@
         
         decir("¡Hajime!", true);
 
-        let tiempoRestante = 10;
+        let tiempoRestante = 10.5;
         const cronometro = setInterval(() => {
             tiempoRestante--;
             if (modo === "TEST_ACTIVO") {
@@ -299,34 +295,36 @@
         statusText.style.color = "#FFD700";
         statusText.innerText = "¡YAME! TEST COMPLETADO";
 
-        const nombreAtleta = document.getElementById('atleta-nombre').value.toUpperCase();
-        document.getElementById('report-atleta').innerText = `ALUMNO: ${nombreAtleta} (BRAZO ${selectedArm === 'R' ? 'DERECHO' : 'IZQUIERDO'})`;
+        // Obtener el nombre ingresado en el input
+        const nombreAtleta = document.getElementById('atleta-nombre').value;
+        const nombreMayusculas = nombreAtleta.toUpperCase();
+        
+        document.getElementById('report-atleta').innerText = `ALUMNO: ${nombreMayusculas} (BRAZO ${selectedArm === 'R' ? 'DERECHO' : 'IZQUIERDO'})`;
         document.getElementById('final-count').innerText = tsukiCount;
         
-        // --- PROCESAMIENTO DE LAS CONDICIONANTES VERBALES ---
+        // Evaluar las frases condicionantes según el rendimiento del alumno
         let fraseCondicional = "";
         if (tsukiCount > 10) {
             fraseCondicional = "¡Felicidades! Eres una máquina de Yako Tsukis, casi casi como el sensei Américo.";
         } else if (tsukiCount >= 8 && tsukiCount <= 10) {
-            fraseCondicional = "¡Bien hecho!";
+            fraseCondicional = "¡Bien hecho campeón!, te cansaste?";
         } else if (tsukiCount >= 5 && tsukiCount <= 7) {
-            fraseCondicional = "Mmmmm hay que seguir trabajando para mejorar esa cuenta.";
+            fraseCondicional = "Definitivamente hay que seguir trabajando para mejorar esa cuenta. Vuelve a intentarlo";
         } else if (tsukiCount >= 2 && tsukiCount <= 4) {
             fraseCondicional = "Bueno... ¡espero que el sensei no te haya visto!";
         } else if (tsukiCount === 1) {
-            fraseCondicional = "¿Te dio algún calambre o qué?";
-        } else { // 0 golpes
+            fraseCondicional = "Ah caray! ¿Qué te pasó?, ¿Te dio algún calambre o qué?";
+        } else {
             fraseCondicional = "¿No has pensado en tocar guitarra mejor?";
         }
 
-        // Construcción del mensaje final de voz
-        const mensajeVozFinal = `Prueba finalizada. Conseguiste ${tsukiCount} golpes exitosos. ${fraseCondicional}`;
+        // --- CONSTRUCCIÓN DEL NUEVO COMANDO DE VOZ PERSONALIZADO ---
+        const mensajeVozFinal = `Muy bien ${nombreAtleta}. Prueba finalizada, conseguiste ${tsukiCount} golpes exitosos. ${fraseCondicional}`;
         
-        // Desplegar texto en el panel visual
         document.getElementById('feedback-text').innerText = fraseCondicional;
         document.getElementById('results-panel').style.display = "block";
 
-        // Pequeño retardo después del Yame para que no se encimen los audios
+        // Breve pausa táctica después del Yame para procesar la voz limpia
         setTimeout(() => {
             decir(mensajeVozFinal, false);
         }, 800);
