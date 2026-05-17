@@ -46,7 +46,7 @@
 
   <div id="top-controls">
     <div class="btn-row">
-        <div id="status-display">TEST 10s GYAKU TSUKI</div>
+        <div id="status-display">10s GYAKU TSUKI</div>
         <div class="selector-group">
             <div id="btn-cam-front" class="opt-btn active" onclick="switchCam('user')">FRONT</div>
             <div id="btn-cam-back" class="opt-btn" onclick="switchCam('environment')">BACK</div>
@@ -102,25 +102,21 @@
     
     let golpeExtendido = false; 
     let baseDesplazada = false;
-    
-    // Puntos de calibración y disparo de inicio automático
     let posicionInicialPieApoyo = null;
     let posicionCalibracionCamaraPie = null; 
 
-    let audioCtx = null;
-    function initAudio() {
-        if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-        if (audioCtx.state === 'suspended') { audioCtx.resume(); }
-    }
-
-    function playAudio(freq, dur, type="sawtooth", vol=0.7) {
-        initAudio(); if(!audioCtx) return;
-        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
-        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        gain.gain.setValueAtTime(vol, audioCtx.currentTime); 
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
-        osc.start(); osc.stop(audioCtx.currentTime + dur);
+    // --- NUEVO SISTEMA DE AUDIO: SÍNTESIS DE VOZ NATIVA ---
+    function decir(texto, urgencia = false) {
+        if ('speechSynthesis' in window) {
+            // Si es un conteo numérico rápido o golpe, cancelamos el audio previo para evitar retrasos acumulados
+            if (urgencia) { window.speechSynthesis.cancel(); }
+            
+            const utterance = new SpeechSynthesisUtterance(texto);
+            utterance.lang = 'es-MX'; // Español de México
+            utterance.rate = 1.2;     // Velocidad ligeramente aumentada para mantener el ritmo deportivo
+            utterance.pitch = 1.0;    // Tono de voz normal/firme
+            window.speechSynthesis.speak(utterance);
+        }
     }
 
     const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
@@ -163,47 +159,37 @@
         let angCodo = Math.abs((Math.atan2(muñeca.y - codo.y, muñeca.x - codo.x) - Math.atan2(hombro.y - codo.y, hombro.x - codo.x)) * 180 / Math.PI);
         if (angCodo > 180) angCodo = 360 - angCodo;
 
-        // --- MONITOR DE ÁNGULO EN TIEMPO REAL ---
         angleNumberText.innerText = `${Math.round(angCodo)}°`;
         
-        // Cambios de color adaptados al nuevo umbral de 45°
         if (angCodo >= 175) {
-            angleNumberText.style.color = "#10b981"; // Verde: Extensión completa
+            angleNumberText.style.color = "#10b981";
         } else if (angCodo <= 45) {
-            angleNumberText.style.color = "#0284c7"; // Azul: Hikite / Recobro correcto (<= 45°)
+            angleNumberText.style.color = "#0284c7";
         } else {
-            angleNumberText.style.color = "#FFD700"; // Amarillo Oro: Transición
+            angleNumberText.style.color = "#FFD700";
         }
 
-        // --- RENDERIZADO DEL ESQUELETO ---
         canvasCtx.lineWidth = 4; canvasCtx.strokeStyle = "#FFD700";
         canvasCtx.beginPath(); canvasCtx.moveTo(hombro.x * canvasElement.width, hombro.y * canvasElement.height);
         canvasCtx.lineTo(codo.x * canvasElement.width, codo.y * canvasElement.height);
         canvasCtx.lineTo(muñeca.x * canvasElement.width, muñeca.y * canvasElement.height); canvasCtx.stroke();
         
-        // Render del nodo del pie de apoyo monitoreado
         canvasCtx.fillStyle = "#00E5FF"; canvasCtx.beginPath();
         canvasCtx.arc(pieApoyo.x * canvasElement.width, pieApoyo.y * canvasElement.height, 8, 0, 2 * Math.PI); canvasCtx.fill();
 
         drawLandmarks(canvasCtx, [hombro, codo, muñeca], {color: "#FFD700", lineWidth: 2});
 
-        // --- MODO: ESPERANDO DISPARO AUTOMÁTICO DE INICIO ---
         if (modo === "ESPERANDO_INICIO") {
             if (!posicionCalibracionCamaraPie) {
-                // Registrar la posición en reposo inicial del pie al encender la cámara
                 posicionCalibracionCamaraPie = { x: pieApoyo.x, y: pieApoyo.y };
             } else {
-                // Calcular diferencia vertical en centímetros (Invertido en píxeles: subir implica menor 'y')
                 let elevacionPieCm = (posicionCalibracionCamaraPie.y - pieApoyo.y) * canvasElement.height / pxPorCm;
-                
-                // Si el pie se levanta 15 cm o más, se dispara el test de inmediato
                 if (elevacionPieCm >= 15.0) {
                     prepararTest();
                 }
             }
         }
 
-        // --- MODO: TEST EN CURSO (10 SEGUNDOS ACTIVOS) ---
         if (modo === "TEST_ACTIVO") {
           if (!golpeExtendido && angCodo >= 175) {
               golpeExtendido = true;
@@ -215,14 +201,12 @@
               }
           }
 
-          // Validación modificada a umbral de 45 grados para el recobro continuo
           if (golpeExtendido && angCodo <= 45) {
               if (baseDesplazada) {
                   tsukiCount++;
-                  playAudio(1200, 0.15, "sine", 1.0);
                   statusText.innerText = `TSUKIS: ${tsukiCount}`;
-              } else {
-                  playAudio(300, 0.1, "triangle", 0.3); // Falta de desplazamiento base
+                  // Dice el número del golpe inmediatamente reemplazando cualquier audio previo
+                  decir(tsukiCount.toString(), true); 
               }
               golpeExtendido = false;
               baseDesplazada = false;
@@ -235,14 +219,21 @@
     function prepararTest() {
         if (modo === "PREPARACION" || modo === "TEST_ACTIVO") return; 
         modo = "PREPARACION";
-        initAudio(); let cuenta = 5;
+        let cuenta = 5;
         document.getElementById('btn-start-test').style.display = "none";
         
+        // Primera llamada para despertar el motor de voz en interacciones móviles
+        decir("Preparase");
+
         const timer = setInterval(() => {
             statusText.style.background = "#b45309";
             statusText.style.color = "#fff";
             statusText.innerText = `¡PREPARASE!: ${cuenta}`;
-            playAudio(600, 0.08, "sine"); cuenta--;
+            
+            if (cuenta > 0) {
+                decir(cuenta.toString());
+            }
+            cuenta--;
             
             if(cuenta < 0) { 
                 clearInterval(timer); 
@@ -257,22 +248,28 @@
         baseDesplazada = false;
         modo = "TEST_ACTIVO";
 
-        // Registrar la base firme exacta para el test al segundo cero del Hajime
         if (currentLandmarks) {
             const idxPieApoyo = (selectedArm === 'R') ? 31 : 32;
             posicionInicialPieApoyo = { x: currentLandmarks[idxPieApoyo].x, y: currentLandmarks[idxPieApoyo].y };
         }
 
-        playAudio(180, 0.6, "sawtooth", 0.9);
         statusText.style.background = "#064e3b";
         statusText.style.color = "#fff";
         statusText.innerText = `¡HAJIME! TSUKIS: 0`;
+        
+        // ¡Señal verbal de inicio de combate!
+        decir("¡Hajime!", true);
 
         let tiempoRestante = 10;
         const cronometro = setInterval(() => {
             tiempoRestante--;
             if (modo === "TEST_ACTIVO") {
                 statusText.innerText = `TIEMPO: ${tiempoRestante}s | TSUKIS: ${tsukiCount}`;
+            }
+
+            // Alerta verbal de los últimos 3 segundos (Opcional, añade presión competitiva)
+            if (tiempoRestante <= 3 && tiempoRestante > 0 && modo === "TEST_ACTIVO") {
+                decir(tiempoRestante.toString());
             }
 
             if (tiempoRestante <= 0) {
@@ -284,8 +281,8 @@
 
     function finalizarTest() {
         modo = "FIN";
-        playAudio(220, 0.4, "sawtooth", 0.8);
-        setTimeout(() => { playAudio(220, 0.4, "sawtooth", 0.8); }, 500);
+        // Comando de detención inmediata
+        decir("¡Yame!", true);
 
         statusText.style.background = "#1a1a1a";
         statusText.style.color = "#FFD700";
@@ -298,8 +295,9 @@
     }
 
     async function activarCamara() {
-      initAudio();
-      posicionCalibracionCamaraPie = null; // Reiniciar calibración automática
+      // Activar un audio vacío al inicio para asegurar permisos del navegador en móviles
+      decir(""); 
+      posicionCalibracionCamaraPie = null;
       modo = "ESPERANDO_INICIO";
       
       const camera = new Camera(videoElement, { 
