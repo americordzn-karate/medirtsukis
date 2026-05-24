@@ -347,6 +347,23 @@
       document.getElementById('btn-start-test').style.display = "block";
       statusText.innerText = "MUEVA EL PIE O PRESIONE INICIAR PARA ARRANCAR";
     }
+    // ── LECTURA DE PARÁMETROS DESDE URL ──────────────────────────
+const urlParams = new URLSearchParams(window.location.search);
+const paramNombre   = urlParams.get('nombre');
+const paramReto     = urlParams.get('reto');
+const paramEstatura = urlParams.get('estatura');
+
+if (paramNombre) {
+  document.getElementById('atleta-nombre').value = paramNombre;
+  document.getElementById('atleta-nombre').readOnly = true;
+}
+
+if (paramEstatura) {
+  const largoBrazo = (parseFloat(paramEstatura) * 0.165).toFixed(1);
+  document.getElementById('antebrazo-cm').value = largoBrazo;
+  document.getElementById('antebrazo-cm').readOnly = true;
+}
+// ─────────────────────────────────────────────────────────────
   </script>
 </body>
 </html>
