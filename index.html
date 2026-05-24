@@ -88,7 +88,7 @@
 
       <div id="feedback-text"></div>
 
-      <button class="action-btn btn-camera" onclick="location.reload()" style="width:100%; max-width:280px; padding:12px; margin-top:10px;">REPETIR PRUEBA</button>
+      <button class="action-btn btn-camera" onclick="regresarPortal()" style="width:100%; max-width:280px; padding:12px; margin-top:10px;">VOLVER AL PORTAL</button>
     </div>
   </div>
 
@@ -387,6 +387,13 @@ function enviarResultado() {
   .catch((err) => {
     console.error("Error al enviar resultado:", err);
   });
+}
+// ─────────────────────────────────────────────────────────────
+    // ── REGRESO AL PORTAL CON PARÁMETROS ORIGINALES ──────────────
+function regresarPortal() {
+  const base = "https://americordzn-karate.github.io/retos/";
+  const params = new URLSearchParams(window.location.search);
+  window.location.href = base + "?" + params.toString();
 }
 // ─────────────────────────────────────────────────────────────
   </script>
