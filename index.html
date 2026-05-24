@@ -364,6 +364,31 @@ if (paramEstatura) {
   document.getElementById('antebrazo-cm').readOnly = true;
 }
 // ─────────────────────────────────────────────────────────────
+    // ── ENVÍO DE RESULTADOS AL APPSCRIPT ─────────────────────────
+function enviarResultado() {
+  const appScriptURL = "https://script.google.com/macros/s/AKfycbwX5w8iiwkJVbGtpz-5f20U9jue2MC0vouE3blkHXo9CIMqg9bvCZrAYE8WKxH4gXGWzg/exec";
+
+  const hoy = new Date();
+  const fechaFormateada = hoy.getFullYear() + '-' +
+    String(hoy.getMonth() + 1).padStart(2, '0') + '-' +
+    String(hoy.getDate()).padStart(2, '0');
+
+  const params = new URLSearchParams({
+    Nombre_Alumno : paramNombre || document.getElementById('atleta-nombre').value,
+    Nombre_Reto   : paramReto   || "TSUKIS EN 10 SEGUNDOS",
+    Fecha_Reto    : fechaFormateada,
+    Puntos        : tsukiCount
+  });
+
+  fetch(appScriptURL + "?" + params.toString(), { method: "GET", mode: "no-cors" })
+    .then(() => {
+      console.log("Resultado enviado correctamente.");
+    })
+    .catch((err) => {
+      console.error("Error al enviar resultado:", err);
+    });
+}
+// ─────────────────────────────────────────────────────────────
   </script>
 </body>
 </html>
