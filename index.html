@@ -60,7 +60,7 @@
     <div class="config-box">
         <div class="input-field">ALUMNO: <input type="text" id="atleta-nombre" value="KARATEKA"></div>
         <div class="input-field">BRAZO(CM): <input type="number" id="antebrazo-cm" style="width:40px;" value="25"></div>
-        <button id="btn-camera" class="action-btn btn-camera" style="max-width: 95px; padding: 6px;" onclick="activarCamara()">1. CONECTAR</button>
+        <button id="btn-camera" class="action-btn btn-camera" style="max-width: 95px; padding: 6px; background:#555; color:#999; cursor:not-allowed;" onclick="activarCamara()" disabled>1. CONECTAR</button>
     </div>
     <button id="btn-start-test" class="action-btn btn-start" onclick="prepararTest()">2. INICIAR TEST (HAJIME)</button>
   </div>
@@ -419,8 +419,13 @@ async function verificarIntentosHoy() {
       statusText.innerText = `YA USASTE TUS ${limitePermitido} INTENTO(S) DE HOY`;
       statusText.style.background = "#7f1d1d";
       statusText.style.color = "#fff";
+    } else {
+      const btnCamara = document.getElementById('btn-camera');
+      btnCamara.disabled = false;
+      btnCamara.style.background = "#FFD700";
+      btnCamara.style.color = "#000";
+      btnCamara.style.cursor = "pointer";
     }
-
   } catch (err) {
     console.error("Error al verificar intentos:", err);
   }
