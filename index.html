@@ -389,6 +389,46 @@ function enviarResultado() {
   });
 }
 // ─────────────────────────────────────────────────────────────
+
+// ── VERIFICACIÓN DE INTENTOS DIARIOS ─────────────────────────
+async function verificarIntentosHoy() {
+  const appScriptURL = "https://script.google.com/macros/s/AKfycbwX5w8iiwkJVbGtpz-5f20U9jue2MC0vouE3blkHXo9CIMqg9bvCZrAYE8WKxH4gXGWzg/exec";
+  const nombreReto = paramReto || "TSUKIS EN 10 SEGUNDOS";
+  const nombreAlumno = paramNombre || document.getElementById('atleta-nombre').value;
+
+  try {
+    const res = await fetch(appScriptURL);
+    const data = await res.json();
+
+    // Obtener el límite diario del catálogo
+    const retoInfo = data.retos.find(r => r.nombre === nombreReto);
+    const limitePermitido = retoInfo ? parseInt(retoInfo.diario_permitido) : 999;
+
+    // Obtener cuántos intentos lleva hoy
+    const hashHoy = `${nombreAlumno}_${nombreReto}`;
+    const intentosRealizados = data.intentosHoy[hashHoy] || 0;
+
+    // Si ya alcanzó el límite, deshabilitar el botón 1
+    if (intentosRealizados >= limitePermitido) {
+      const btnCamara = document.getElementById('btn-camera');
+      btnCamara.disabled = true;
+      btnCamara.style.background = "#555";
+      btnCamara.style.color = "#999";
+      btnCamara.style.cursor = "not-allowed";
+      btnCamara.innerText = "LÍMITE ALCANZADO";
+      statusText.innerText = `YA USASTE TUS ${limitePermitido} INTENTO(S) DE HOY`;
+      statusText.style.background = "#7f1d1d";
+      statusText.style.color = "#fff";
+    }
+
+  } catch (err) {
+    console.error("Error al verificar intentos:", err);
+  }
+}
+
+verificarIntentosHoy();
+// ─────────────────────────────────────────────────────────────
+    
     // ── REGRESO AL PORTAL CON PARÁMETROS ORIGINALES ──────────────
 function regresarPortal() {
   const base = "https://americordzn-karate.github.io/retos/";
